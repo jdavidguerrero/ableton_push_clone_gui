@@ -46,7 +46,6 @@ private slots:
     void handleReadyRead();
     void handleError(QSerialPort::SerialPortError error);
     void handleReconnectTimeout();
-    void handlePingTimeout();
 
 private:
     void openPort();
@@ -64,7 +63,6 @@ private:
     QString m_portName = QStringLiteral("/dev/serial0");
     int m_baudRate = 115200;
     QTimer m_reconnectTimer;
-    QTimer m_pingTimeoutTimer;
 };
 
 #endif // SERIALCONTROLLER_H

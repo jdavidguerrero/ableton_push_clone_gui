@@ -9,7 +9,6 @@ constexpr quint8 CmdHandshake = 0x00;
 constexpr quint8 CmdHandshakeReply = 0x01;
 constexpr quint8 CmdPing = 0x03;
 constexpr quint8 CmdDisconnect = 0x02;
-constexpr int PingTimeoutMs = 15000;
 }
 
 SerialController::SerialController(QObject *parent)
@@ -21,10 +20,6 @@ SerialController::SerialController(QObject *parent)
     m_reconnectTimer.setSingleShot(true);
     m_reconnectTimer.setInterval(2000);
     connect(&m_reconnectTimer, &QTimer::timeout, this, &SerialController::handleReconnectTimeout);
-
-    m_pingTimeoutTimer.setSingleShot(true);
-    m_pingTimeoutTimer.setInterval(PingTimeoutMs);
-    connect(&m_pingTimeoutTimer, &QTimer::timeout, this, &SerialController::handlePingTimeout);
 
     openPort();
 }
@@ -99,12 +94,15 @@ void SerialController::closePort()
     setConnected(false);
     setConnectionState(Disconnected);
     m_rxBuffer.clear();
-    m_pingTimeoutTimer.stop();
 }
 
 void SerialController::handleReadyRead()
 {
     const QByteArray chunk = m_serial.readAll();
+    if (!chunk.isEmpty()) {
+        qInfo().noquote() << QStringLiteral("[RX] RAW %1")
+                             .arg(QString::fromLatin1(chunk.toHex(' ')));
+    }
     m_rxBuffer.append(chunk);
 
     while (true) {
@@ -174,13 +172,6 @@ void SerialController::handleReconnectTimeout()
         openPort();
 }
 
-void SerialController::handlePingTimeout()
-{
-    qWarning() << "Ping timeout - marcando desconectado";
-    setConnected(false);
-    setConnectionState(WaitingHandshake);
-}
-
 void SerialController::processFrame(quint8 cmd, const QByteArray &payload)
 {
     switch (cmd) {
@@ -189,17 +180,13 @@ void SerialController::processFrame(quint8 cmd, const QByteArray &payload)
             qInfo() << "Handshake recibido";
             setConnected(true);
             setConnectionState(Connected);
-            m_pingTimeoutTimer.start();
             sendFrame(CmdHandshakeReply);
         } else {
             qWarning() << "Handshake payload inesperado" << payload;
         }
         break;
     case CmdPing:
-        qInfo() << "Ping recibido -> respondiendo";
         sendFrame(CmdPing);
-        if (m_connectionState == Connected)
-            m_pingTimeoutTimer.start();
         break;
     case CmdDisconnect:
         qInfo() << "CMD_DISCONNECT recibido";
@@ -260,10 +247,6 @@ void SerialController::setConnected(bool value)
 
     m_connected = value;
     emit connectedChanged();
-
-    if (!m_connected) {
-        m_pingTimeoutTimer.stop();
-    }
 }
 
 void SerialController::setConnectionState(ConnectionState state)
