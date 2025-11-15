@@ -17,6 +17,7 @@ tar czf ${PROJECT_NAME}.tar.gz \
     *.h \
     *.qml \
     *.qrc \
+    qmldir \
     assets/ \
     components/ \
     views/

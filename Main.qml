@@ -11,7 +11,7 @@ Window {
     width: 800
     height: 480
     visible: true
-    //visibility: Window.FullScreen  // Pantalla completa en Raspberry Pi
+    visibility: Window.FullScreen  // Pantalla completa
     title: qsTr("PushClone")
     color: PushCloneTheme.background
 
