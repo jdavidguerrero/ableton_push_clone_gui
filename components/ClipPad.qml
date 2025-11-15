@@ -5,7 +5,7 @@ import PushClone 1.0
 // CLIP PAD - Individual component for session grid
 // ═══════════════════════════════════════════════════════════
 // Represents a clip in the SessionView (8×4 grid)
-// States: 0=empty, 1=playing, 2=queued, 3=recording, 4=stopped
+// States: 0=empty, 1=stopped, 2=playing, 3=queued, 4=recording
 // ═══════════════════════════════════════════════════════════
 
 Rectangle {
@@ -35,22 +35,22 @@ Rectangle {
     height: 60
     radius: PushCloneTheme.radius
 
-    // Color based on state
+    readonly property bool hasColorInfo: !Qt.colorEqual(clipColor, PushCloneTheme.clipEmpty)
+
+    // Color based on state (fallback to raw color even if state unknown)
     color: {
-        if (clipState === 0) {
-            // Empty: RGB(40, 40, 40) - base color from API
-            return PushCloneTheme.clipEmpty
-        } else if (clipState === 1) {
-            // Playing: brighter
+        switch (clipState) {
+        case 0:
+            return hasColorInfo ? clipColor : PushCloneTheme.clipEmpty
+        case 1:
+            return clipColor
+        case 2:
             return Qt.lighter(clipColor, 1.4)
-        } else if (clipState === 2) {
-            // Queued: pulsing yellow
+        case 3:
             return PushCloneTheme.warning
-        } else if (clipState === 3) {
-            // Recording: pulsing red
+        case 4:
             return PushCloneTheme.error
-        } else {
-            // Stopped: original color from Live
+        default:
             return clipColor
         }
     }
@@ -78,22 +78,20 @@ Rectangle {
     Text {
         id: nameText
         text: clipName
-        visible: clipState !== 0  // Only show if not empty
+        visible: clipName.length > 0  // Show whenever we have a name
 
         anchors {
             centerIn: parent
             margins: PushCloneTheme.spacingSmall
         }
 
-        color: {
-            // Contrast based on background brightness
-            var luminance = (clipColor.r * 0.299 + clipColor.g * 0.587 + clipColor.b * 0.114)
-            return luminance > 0.5 ? "#000000" : "#ffffff"
-        }
+        color: "#ffffff"
 
-        font.pixelSize: PushCloneTheme.fontSizeSmall
+        font.pixelSize: PushCloneTheme.fontSizeMedium
         font.family: PushCloneTheme.fontFamily
-        font.bold: clipState === 1  // Bold when playing
+        font.bold: clipState === 2  // Bold when playing
+        style: Text.Raised
+        styleColor: "#000000"
 
         elide: Text.ElideRight
         width: parent.width - 8
@@ -105,7 +103,7 @@ Rectangle {
     // ═══════════════════════════════════════════════════════
     Text {
         id: stateIcon
-        visible: clipState === 1 || clipState === 3
+        visible: clipState === 2 || clipState === 4
 
         anchors {
             right: parent.right
@@ -113,7 +111,7 @@ Rectangle {
             margins: 4
         }
 
-        text: clipState === 1 ? "▶" : "●"  // Playing: ▶, Recording: ●
+        text: clipState === 2 ? "▶" : "●"  // Playing: ▶, Recording: ●
         color: "#ffffff"
         font.pixelSize: 8
         font.bold: true
@@ -123,7 +121,7 @@ Rectangle {
     // PULSING ANIMATION (queued and recording)
     // ═══════════════════════════════════════════════════════
     SequentialAnimation {
-        running: clipState === 2 || clipState === 3
+        running: clipState === 3 || clipState === 4
         loops: Animation.Infinite
 
         NumberAnimation {
@@ -201,20 +199,20 @@ Rectangle {
         },
         State {
             name: "playing"
-            when: clipState === 1
+            when: clipState === 2
             // Color already handled in binding
         },
         State {
             name: "queued"
-            when: clipState === 2
-        },
-        State {
-            name: "recording"
             when: clipState === 3
         },
         State {
-            name: "stopped"
+            name: "recording"
             when: clipState === 4
+        },
+        State {
+            name: "stopped"
+            when: clipState === 1
         }
     ]
 }

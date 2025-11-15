@@ -204,7 +204,6 @@ Rectangle {
                 icon: "■"
                 onPressed: {
                     console.log("Stop pressed")
-                    root.isPlaying = false
                     root.stopPressed()
                 }
             }
@@ -217,7 +216,6 @@ Rectangle {
                 activeColor: PushCloneTheme.success
                 onPressed: {
                     console.log("Play pressed")
-                    root.isPlaying = !root.isPlaying
                     root.playPressed()
                 }
             }
@@ -230,7 +228,6 @@ Rectangle {
                 activeColor: PushCloneTheme.error
                 onPressed: {
                     console.log("Record pressed")
-                    root.isRecording = !root.isRecording
                     root.recordPressed()
                 }
             }

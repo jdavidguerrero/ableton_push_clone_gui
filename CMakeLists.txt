@@ -14,6 +14,12 @@ if(USE_QT6)
 
     qt_add_executable(appPushClone
         main.cpp
+        ClipGridModel.cpp
+        ClipGridModel.h
+        TrackListModel.cpp
+        TrackListModel.h
+        SceneListModel.cpp
+        SceneListModel.h
         SerialController.cpp
         SerialController.h
     )
@@ -65,6 +71,12 @@ else()
     add_executable(appPushClone
         main.cpp
         resources.qrc
+        ClipGridModel.cpp
+        ClipGridModel.h
+        TrackListModel.cpp
+        TrackListModel.h
+        SceneListModel.cpp
+        SceneListModel.h
         SerialController.cpp
         SerialController.h
     )

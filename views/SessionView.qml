@@ -16,53 +16,7 @@ Rectangle {
 
     color: PushCloneTheme.background
 
-    // ═══════════════════════════════════════════════════════
-    // TEST DATA (Later will come from UART backend)
-    // ═══════════════════════════════════════════════════════
-    property var trackNames: ["Drums", "Bass", "Lead", "Pad", "FX", "Vocal", "Keys", "Synth"]
-    property var trackColors: [
-        PushCloneTheme.clipColors[0],   // Red
-        PushCloneTheme.clipColors[1],   // Orange
-        PushCloneTheme.clipColors[2],   // Yellow
-        PushCloneTheme.clipColors[4],   // Green
-        PushCloneTheme.clipColors[8],   // Blue
-        PushCloneTheme.clipColors[9],   // Purple
-        PushCloneTheme.clipColors[10],  // Magenta
-        PushCloneTheme.clipColors[6],   // Cyan
-        PushCloneTheme.clipColors[12]   // Gray (Master)
-    ]
-
-    // Clips grid (8 tracks × 4 scenes = 32 clips)
-    // Estado: 0=empty, 1=playing, 2=queued, 3=recording, 4=stopped
-    property var clipStates: [
-        // Track 0 (Drums)
-        [1, 4, 0, 4],
-        // Track 1 (Bass)
-        [4, 1, 0, 4],
-        // Track 2 (Lead)
-        [4, 0, 4, 0],
-        // Track 3 (Pad)
-        [4, 4, 0, 4],
-        // Track 4 (FX)
-        [0, 4, 4, 0],
-        // Track 5 (Vocal)
-        [4, 0, 4, 4],
-        // Track 6 (Keys)
-        [0, 4, 0, 4],
-        // Track 7 (Synth)
-        [4, 0, 4, 0]
-    ]
-
-    property var clipNames: [
-        ["Kick Loop", "Kick Alt", "", "Break"],
-        ["Bass 1", "Bass 2", "", "Bass Fill"],
-        ["Lead A", "", "Lead B", ""],
-        ["Pad Ambient", "Pad Dark", "", "Pad Bright"],
-        ["", "Reverb", "Delay", ""],
-        ["Verse 1", "", "Chorus", "Bridge"],
-        ["", "Piano", "", "Organ"],
-        ["Synth 1", "", "Synth 2", ""]
-    ]
+    property color masterColor: PushCloneTheme.clipColors[12]
 
     // ═══════════════════════════════════════════════════════
     // MAIN LAYOUT
@@ -81,41 +35,43 @@ Rectangle {
 
             // First 8 tracks (regular width - with clips)
             Repeater {
-                model: 8
+                model: serialController.trackModel
 
                 Rectangle {
+                    property bool activeTrack: model.active
+
                     // Calculate width to match clip grid (8 tracks)
                     width: (parent.width - 60 - PushCloneTheme.spacing - (PushCloneTheme.spacingSmall * 8)) / 8
                     height: parent.height
-                    color: PushCloneTheme.surface
-                    border.color: root.trackColors[index]
-                    border.width: 2
+                    color: activeTrack ? PushCloneTheme.surface : PushCloneTheme.surfaceHover
+                    opacity: activeTrack ? 1.0 : 0.35
+                    border.color: activeTrack ? model.color : PushCloneTheme.border
+                    border.width: activeTrack ? 2 : 1
                     radius: PushCloneTheme.radius
 
-                    // Track color indicator
                     Rectangle {
                         width: parent.width
                         height: 4
                         anchors.top: parent.top
-                        color: root.trackColors[index]
+                        color: activeTrack ? model.color : PushCloneTheme.border
                         radius: PushCloneTheme.radius
                     }
 
                     Text {
-                        text: root.trackNames[index]
+                        text: activeTrack ? model.name : ""
                         anchors.centerIn: parent
-                        color: PushCloneTheme.text
+                        color: activeTrack ? PushCloneTheme.text : PushCloneTheme.textDim
                         font.pixelSize: PushCloneTheme.fontSizeSmall
                         font.family: PushCloneTheme.fontFamily
-                        font.bold: true
+                        font.bold: activeTrack
                         elide: Text.ElideRight
                     }
 
-                    // Touch to select track
                     MouseArea {
                         anchors.fill: parent
+                        enabled: activeTrack
                         onClicked: {
-                            console.log("Track selected:", index, root.trackNames[index])
+                            console.log("Track selected:", model.index, model.name)
                             // TODO: Send CMD_TRACK_SELECT
                         }
                     }
@@ -127,7 +83,7 @@ Rectangle {
                 width: 60
                 height: parent.height
                 color: PushCloneTheme.surface
-                border.color: root.trackColors[8]
+                border.color: root.masterColor
                 border.width: 2
                 radius: PushCloneTheme.radius
 
@@ -136,7 +92,7 @@ Rectangle {
                     width: parent.width
                     height: 4
                     anchors.top: parent.top
-                    color: root.trackColors[8]
+                    color: root.masterColor
                     radius: PushCloneTheme.radius
                 }
 
@@ -186,27 +142,24 @@ Rectangle {
 
                 // 32 ClipPads (8×4)
                 Repeater {
-                    model: 32
+                    model: serialController.clipModel
                     delegate: Components.ClipPad {
-                        property int trackIdx: index % 8
-                        property int sceneIdx: Math.floor(index / 8)
-
                         width: clipGrid.padWidth
                         height: clipGrid.padHeight
 
-                        trackIndex: trackIdx
-                        sceneIndex: sceneIdx
-                        clipName: root.clipNames[trackIdx][sceneIdx]
-                        clipState: root.clipStates[trackIdx][sceneIdx]
-                        clipColor: root.trackColors[trackIdx]
+                        trackIndex: model.track
+                        sceneIndex: model.scene
+                        clipName: model.name
+                        clipState: model.state
+                        clipColor: model.color
 
                         onClipTriggered: {
-                            console.log("Clip triggered: Track", trackIdx, "Scene", sceneIdx)
+                            console.log("Clip triggered: Track", trackIndex, "Scene", sceneIndex)
                             // TODO: Send CMD_CLIP_TRIGGER via UART
                         }
 
                         onClipLongPressed: {
-                            console.log("Clip long pressed: Track", trackIdx, "Scene", sceneIdx)
+                            console.log("Clip long pressed: Track", trackIndex, "Scene", sceneIndex)
                             // TODO: Show context menu (delete, duplicate, rename)
                         }
                     }
@@ -220,13 +173,13 @@ Rectangle {
                 spacing: PushCloneTheme.spacingSmall
 
                 Repeater {
-                    model: 4
+                    model: serialController.sceneModel
 
                     Rectangle {
                         width: parent.width
                         height: (parent.height - (PushCloneTheme.spacingSmall * 3)) / 4
-                        color: PushCloneTheme.surface
-                        border.color: PushCloneTheme.borderBright
+                        color: model.triggered ? PushCloneTheme.surfaceActive : PushCloneTheme.surface
+                        border.color: model.color
                         border.width: 1
                         radius: PushCloneTheme.radius
 
@@ -236,14 +189,14 @@ Rectangle {
 
                             Text {
                                 text: "▶"
-                                color: PushCloneTheme.primary
+                                color: model.triggered ? PushCloneTheme.primary : PushCloneTheme.textDim
                                 font.pixelSize: PushCloneTheme.fontSizeLarge
                                 font.bold: true
                                 anchors.horizontalCenter: parent.horizontalCenter
                             }
 
                             Text {
-                                text: "Scene\n" + (index + 1)
+                                text: model.name
                                 color: PushCloneTheme.textDim
                                 font.pixelSize: PushCloneTheme.fontSizeSmall
                                 font.family: PushCloneTheme.fontFamily
@@ -252,28 +205,19 @@ Rectangle {
                         }
 
                         MouseArea {
+                            id: sceneMouseArea
                             anchors.fill: parent
                             onClicked: {
-                                console.log("Scene fired:", index + 1)
+                                console.log("Scene fired:", model.index)
                                 // TODO: Enviar CMD_SCENE_FIRE
                             }
                         }
 
-                        // Press feedback
                         scale: sceneMouseArea.pressed ? 0.95 : 1.0
                         Behavior on scale {
                             NumberAnimation {
                                 duration: PushCloneTheme.animationFast
                                 easing.type: Easing.OutQuad
-                            }
-                        }
-
-                        MouseArea {
-                            id: sceneMouseArea
-                            anchors.fill: parent
-                            onClicked: {
-                                console.log("Scene fired:", index + 1)
-                                // TODO: Enviar CMD_SCENE_FIRE
                             }
                         }
                     }

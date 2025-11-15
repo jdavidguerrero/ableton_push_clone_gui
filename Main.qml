@@ -177,25 +177,21 @@ Window {
                 source: "components/TransportBar.qml"
 
                 onLoaded: {
-                    // Set test data
-                    item.tempo = 120.0
-                    item.songPosition = "1.1.1"
-                    item.selectedClip = "Drums - Kick Loop"
+                    item.isPlaying = Qt.binding(function() { return serialController.transportPlaying })
+                    item.isRecording = Qt.binding(function() { return serialController.transportRecording })
+                    item.tempo = Qt.binding(function() { return serialController.transportTempo })
+                    item.songPosition = Qt.binding(function() { return serialController.transportPosition })
 
-                    // Connect signals
                     item.playPressed.connect(function() {
-                        console.log("Transport: Play pressed")
-                        // TODO: Send CMD_TRANSPORT_PLAY via UART
+                        serialController.sendTransportPlay(!serialController.transportPlaying)
                     })
 
                     item.stopPressed.connect(function() {
-                        console.log("Transport: Stop pressed")
-                        // TODO: Send CMD_TRANSPORT_PLAY (stop) via UART
+                        serialController.sendTransportPlay(false)
                     })
 
                     item.recordPressed.connect(function() {
-                        console.log("Transport: Record pressed")
-                        // TODO: Send CMD_TRANSPORT_RECORD via UART
+                        serialController.sendTransportRecord(!serialController.transportRecording)
                     })
                 }
             }
