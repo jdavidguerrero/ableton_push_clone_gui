@@ -36,6 +36,11 @@ cd ~/PushClone
 # Extraer
 tar xzf ~/PushClone.tar.gz
 
+# Dependencias (Qt5 + SerialPort)
+echo "📦 Instalando dependencias de Qt..."
+sudo apt-get update
+sudo apt-get install -y qtdeclarative5-dev libqt5serialport5-dev
+
 # Crear directorio de build
 mkdir -p build
 cd build

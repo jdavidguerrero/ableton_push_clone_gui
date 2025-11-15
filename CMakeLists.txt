@@ -9,11 +9,13 @@ option(USE_QT6 "Use Qt6 instead of Qt5" ON)
 
 if(USE_QT6)
     message(STATUS "Building with Qt6")
-    find_package(Qt6 REQUIRED COMPONENTS Quick)
+    find_package(Qt6 REQUIRED COMPONENTS Quick SerialPort)
     qt_standard_project_setup(REQUIRES 6.8)
 
     qt_add_executable(appPushClone
         main.cpp
+        SerialController.cpp
+        SerialController.h
     )
 
     qt_add_qml_module(appPushClone
@@ -48,7 +50,7 @@ if(USE_QT6)
     endif()
 
     target_link_libraries(appPushClone
-        PRIVATE Qt6::Quick
+        PRIVATE Qt6::Quick Qt6::SerialPort
     )
     
     target_compile_definitions(appPushClone PRIVATE USE_QT6)
@@ -58,15 +60,17 @@ else()
     set(CMAKE_AUTOMOC ON)
     set(CMAKE_AUTORCC ON)
 
-    find_package(Qt5 REQUIRED COMPONENTS Quick Qml)
+    find_package(Qt5 REQUIRED COMPONENTS Quick Qml SerialPort)
 
     add_executable(appPushClone
         main.cpp
         resources.qrc
+        SerialController.cpp
+        SerialController.h
     )
 
     target_link_libraries(appPushClone
-        PRIVATE Qt5::Quick Qt5::Qml
+        PRIVATE Qt5::Quick Qt5::Qml Qt5::SerialPort
     )
 endif()
 

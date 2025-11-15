@@ -1,11 +1,16 @@
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
+#include <QQmlContext>
+
+#include "SerialController.h"
 
 int main(int argc, char *argv[])
 {
     QGuiApplication app(argc, argv);
 
     QQmlApplicationEngine engine;
+    auto serialController = new SerialController(&app);
+    engine.rootContext()->setContextProperty(QStringLiteral("serialController"), serialController);
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     // Qt6: Use objectCreationFailed signal
