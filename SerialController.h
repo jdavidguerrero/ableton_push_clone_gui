@@ -10,6 +10,7 @@
 #include "ClipGridModel.h"
 #include "TrackListModel.h"
 #include "SceneListModel.h"
+#include "MixerModel.h"
 
 class SerialController : public QObject
 {
@@ -19,13 +20,16 @@ class SerialController : public QObject
     Q_PROPERTY(ClipGridModel* clipModel READ clipModel CONSTANT)
     Q_PROPERTY(TrackListModel* trackModel READ trackModel CONSTANT)
     Q_PROPERTY(SceneListModel* sceneModel READ sceneModel CONSTANT)
+    Q_PROPERTY(MixerModel* mixerModel READ mixerModel CONSTANT)
     Q_PROPERTY(bool transportPlaying READ transportPlaying NOTIFY transportStateChanged)
-    Q_PROPERTY(bool transportRecording READ transportRecording NOTIFY transportStateChanged)
+    Q_PROPERTY(bool transportRecording READ transportRecording NOTIFY transportRecordingChanged)
     Q_PROPERTY(bool transportLoop READ transportLoop NOTIFY transportStateChanged)
+    Q_PROPERTY(bool shiftPressed READ shiftPressed NOTIFY shiftPressedChanged)
     Q_PROPERTY(double transportTempo READ transportTempo NOTIFY transportTempoChanged)
     Q_PROPERTY(QString transportPosition READ transportPosition NOTIFY transportPositionChanged)
     Q_PROPERTY(QString portName READ portName WRITE setPortName NOTIFY portNameChanged)
     Q_PROPERTY(int baudRate READ baudRate WRITE setBaudRate NOTIFY baudRateChanged)
+    Q_PROPERTY(int mixerMode READ mixerMode NOTIFY mixerModeChanged)
 
 public:
     enum ConnectionState {
@@ -55,12 +59,15 @@ public:
     ClipGridModel* clipModel() const { return m_clipModel; }
     TrackListModel* trackModel() const { return m_trackModel; }
     SceneListModel* sceneModel() const { return m_sceneModel; }
+    MixerModel* mixerModel() const { return m_mixerModel; }
 
     bool transportPlaying() const { return m_transportPlaying; }
     bool transportRecording() const { return m_transportRecording; }
     bool transportLoop() const { return m_transportLoop; }
+    bool shiftPressed() const { return m_shiftPressed; }
     double transportTempo() const { return m_transportTempo; }
     QString transportPosition() const { return m_transportPosition; }
+    int mixerMode() const { return m_mixerMode; }
 
 signals:
     void connectedChanged();
@@ -69,8 +76,11 @@ signals:
     void baudRateChanged();
     void connectionError(const QString &message);
     void transportStateChanged();
+    void transportRecordingChanged();
+    void shiftPressedChanged();
     void transportTempoChanged();
     void transportPositionChanged();
+    void mixerModeChanged(int mode);
 
 private slots:
     void handleReadyRead();
@@ -100,6 +110,15 @@ private:
     void handleSceneTriggered(const QByteArray &payload);
     void handleTransportCommand(quint8 cmd, const QByteArray &payload);
     void scheduleTrackCleanup(int trackIndex);
+    
+    // Mixer handlers
+    void handleMixerVolume(const QByteArray &payload);
+    void handleMixerPan(const QByteArray &payload);
+    void handleMixerMute(const QByteArray &payload);
+    void handleMixerSolo(const QByteArray &payload);
+    void handleMixerArm(const QByteArray &payload);
+    void handleMixerSend(const QByteArray &payload);
+    void handleMixerMode(const QByteArray &payload);
 
     QSerialPort m_serial;
     QByteArray m_rxBuffer;
@@ -112,13 +131,51 @@ private:
     ClipGridModel *m_clipModel = nullptr;
     TrackListModel *m_trackModel = nullptr;
     SceneListModel *m_sceneModel = nullptr;
+    MixerModel *m_mixerModel = nullptr;
     bool m_transportPlaying = false;
     bool m_transportRecording = false;
     bool m_transportLoop = false;
+    bool m_shiftPressed = false;
     double m_transportTempo = 120.0;
     QString m_transportPosition = QStringLiteral("1.1.1");
+    int m_mixerMode = 0;  // 0=VOLUME_PAN, 1=SENDS_AB, 2=SENDS_CD, 3=MASTER_RETURNS
     QBitArray m_trackPresence;
     bool m_trackBatchSawZero = false;
+
+    enum Cmd {
+        CmdHandshake = 0x00,
+        CmdHandshakeReply = 0x01,
+        CmdDisconnect = 0x02,
+        CmdPing = 0x03,
+        CmdGridUpdate7bit = 0x60,
+        CmdGridUpdate14bit = 0xA6, // CmdLedGridUpdate14
+        CmdPadUpdate7bit = 0x84,   // CmdLedRgbState
+        CmdPadUpdate14bit = 0xA7,  // CmdLedPadUpdate14
+        CmdClipTrigger = 0x11,
+        CmdClipName = 0x14,
+        CmdClipState = 0x10,
+        CmdTrackName = 0x27,
+        CmdTrackColor = 0x28,
+        CmdSceneName = 0x1B,
+        CmdSceneColor = 0x1C,
+        CmdSceneState = 0x1A,
+        CmdSceneTriggered = 0x1D,
+        CmdTransportPlay = 0x40,
+        CmdTransportRecord = 0x41,
+        CmdTransportLoop = 0x42,
+        CmdTransportTempo = 0x43,
+        CmdTransportPosition = 0x45,
+        CmdTransportState = 0x49,
+        CmdShiftState = 0x88,
+        // Mixer commands
+        CmdMixerVolume = 0x21,
+        CmdMixerPan = 0x22,
+        CmdMixerMute = 0x23,
+        CmdMixerSolo = 0x24,
+        CmdMixerArm = 0x25,
+        CmdMixerSend = 0x26,
+        CmdMixerMode = 0x98
+    };
 };
 
 #endif // SERIALCONTROLLER_H

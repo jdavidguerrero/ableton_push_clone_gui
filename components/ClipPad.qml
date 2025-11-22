@@ -24,9 +24,9 @@ Rectangle {
     // ═══════════════════════════════════════════════════════
     // SIGNALS
     // ═══════════════════════════════════════════════════════
-    signal clipTriggered()                          // Tap: trigger clip
-    signal clipStopped()                            // Stop clip
-    signal clipLongPressed()                        // Long press: context menu
+    signal clipTriggered                          // Tap: trigger clip
+    signal clipStopped                            // Stop clip
+    signal clipLongPressed                        // Long press: context menu
 
     // ═══════════════════════════════════════════════════════
     // APPEARANCE
@@ -38,23 +38,9 @@ Rectangle {
 
     readonly property bool hasColorInfo: !Qt.colorEqual(clipColor, PushCloneTheme.clipEmpty)
 
-    // Color based on state (fallback to raw color even if state unknown)
-    color: {
-        switch (clipState) {
-        case 0:
-            return hasColorInfo ? clipColor : PushCloneTheme.clipEmpty
-        case 1:
-            return clipColor
-        case 2:
-            return Qt.lighter(clipColor, 1.4)
-        case 3:
-            return PushCloneTheme.warning
-        case 4:
-            return PushCloneTheme.error
-        default:
-            return clipColor
-        }
-    }
+    // Use the color directly from the model - it's already processed by the Python script
+    // with the correct state-based color logic (green for playing/queued, red for recording, etc.)
+    color: clipColor
 
     border.color: isSelected ? PushCloneTheme.primary : PushCloneTheme.border
     border.width: isSelected ? 2 : 1
@@ -70,7 +56,9 @@ Rectangle {
     }
 
     Behavior on border.color {
-        ColorAnimation { duration: PushCloneTheme.animationFast }
+        ColorAnimation {
+            duration: PushCloneTheme.animationFast
+        }
     }
 
     // ═══════════════════════════════════════════════════════
@@ -154,27 +142,27 @@ Rectangle {
 
         // Visual feedback on press
         onPressed: {
-            root.scale = 0.95
+            root.scale = 0.95;
         }
 
         onReleased: {
-            root.scale = 1.0
+            root.scale = 1.0;
         }
 
         onCanceled: {
-            root.scale = 1.0
+            root.scale = 1.0;
         }
 
         // Tap: Trigger or stop clip
         onClicked: {
-            console.log("Clip triggered:", trackIndex, sceneIndex, clipName)
-            root.clipTriggered()
+            console.log("Clip triggered:", trackIndex, sceneIndex, clipName);
+            root.clipTriggered();
         }
 
         // Long press: Context menu
         onPressAndHold: {
-            console.log("Clip long pressed:", clipName)
-            root.clipLongPressed()
+            console.log("Clip long pressed:", clipName);
+            root.clipLongPressed();
         }
     }
 

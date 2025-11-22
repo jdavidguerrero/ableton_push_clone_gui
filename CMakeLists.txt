@@ -32,6 +32,8 @@ if(USE_QT6)
         TrackListModel.h
         SceneListModel.cpp
         SceneListModel.h
+        MixerModel.cpp
+        MixerModel.h
         SerialController.cpp
         SerialController.h
     )
@@ -89,6 +91,8 @@ else()
         TrackListModel.h
         SceneListModel.cpp
         SceneListModel.h
+        MixerModel.cpp
+        MixerModel.h
         SerialController.cpp
         SerialController.h
     )

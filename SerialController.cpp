@@ -6,30 +6,6 @@
 #include <QtMath>
 
 namespace {
-constexpr quint8 FrameHeader = 0xAA;
-constexpr quint8 CmdHandshake = 0x00;
-constexpr quint8 CmdClipTrigger = 0x11;
-constexpr quint8 CmdHandshakeReply = 0x01;
-constexpr quint8 CmdClipState = 0x10;
-constexpr quint8 CmdClipName = 0x14;
-constexpr quint8 CmdSceneState = 0x1A;
-constexpr quint8 CmdSceneName = 0x1B;
-constexpr quint8 CmdSceneColor = 0x1C;
-constexpr quint8 CmdSceneTriggered = 0x1D;
-constexpr quint8 CmdGridUpdate7bit = 0x60;
-constexpr quint8 CmdLedRgbState = 0x84;
-constexpr quint8 CmdPing = 0x03;
-constexpr quint8 CmdDisconnect = 0x02;
-constexpr quint8 CmdLedGridUpdate14 = 0xA6;
-constexpr quint8 CmdLedPadUpdate14 = 0xA7;
-constexpr quint8 CmdTrackName = 0x27;
-constexpr quint8 CmdTrackColor = 0x28;
-constexpr quint8 CmdTransportPlay = 0x40;
-constexpr quint8 CmdTransportRecord = 0x41;
-constexpr quint8 CmdTransportLoop = 0x42;
-constexpr quint8 CmdTransportTempo = 0x43;
-constexpr quint8 CmdTransportPosition = 0x45;
-constexpr quint8 CmdTransportState = 0x49;
 
 int decode14Bit(quint8 msb, quint8 lsb)
 {
@@ -83,12 +59,14 @@ QString readLengthPrefixedString(const QByteArray &payload, int offset)
     return QString::fromUtf8(payload.constData() + offset, remaining);
 }
 }
+constexpr quint8 FrameHeader = 0xAA;
 
 SerialController::SerialController(QObject *parent)
     : QObject(parent)
     , m_clipModel(new ClipGridModel(this))
     , m_trackModel(new TrackListModel(this))
     , m_sceneModel(new SceneListModel(this))
+    , m_mixerModel(new MixerModel(this))
 {
     connect(&m_serial, &QSerialPort::readyRead, this, &SerialController::handleReadyRead);
     connect(&m_serial, &QSerialPort::errorOccurred, this, &SerialController::handleError);
@@ -313,13 +291,13 @@ void SerialController::processFrame(quint8 cmd, const QByteArray &payload)
     case CmdGridUpdate7bit:
         handleGridUpdate7bit(payload);
         break;
-    case CmdLedGridUpdate14:
+    case CmdGridUpdate14bit:
         handleGridUpdate14bit(payload);
         break;
-    case CmdLedPadUpdate14:
+    case CmdPadUpdate14bit:
         handlePadUpdate14bit(payload);
         break;
-    case CmdLedRgbState:
+    case CmdPadUpdate7bit:
         handlePadUpdate7bit(payload);
         break;
     case CmdClipState:
@@ -345,10 +323,43 @@ void SerialController::processFrame(quint8 cmd, const QByteArray &payload)
     case CmdTransportRecord:
     case CmdTransportLoop:
     case CmdTransportTempo:
-    case CmdTransportPosition:
     case CmdTransportState:
         handleTransportCommand(cmd, payload);
         break;
+
+    case CmdShiftState:
+        if (payload.size() >= 1) {
+            bool pressed = (payload[0] != 0);
+            if (m_shiftPressed != pressed) {
+                m_shiftPressed = pressed;
+                emit shiftPressedChanged();
+            }
+        }
+        break;
+    
+    // Mixer commands
+    case CmdMixerVolume:
+        handleMixerVolume(payload);
+        break;
+    case CmdMixerPan:
+        handleMixerPan(payload);
+        break;
+    case CmdMixerMute:
+        handleMixerMute(payload);
+        break;
+    case CmdMixerSolo:
+        handleMixerSolo(payload);
+        break;
+    case CmdMixerArm:
+        handleMixerArm(payload);
+        break;
+    case CmdMixerSend:
+        handleMixerSend(payload);
+        break;
+    case CmdMixerMode:
+        handleMixerMode(payload);
+        break;
+
     default:
         // Por ahora solo registramos otros comandos para depuración.
         qDebug() << "Frame recibido:" << Qt::hex << cmd << "len" << payload.size();
@@ -511,23 +522,34 @@ void SerialController::updatePadColor(int track, int scene, const QColor &color)
 
 void SerialController::handleTrackName(const QByteArray &payload)
 {
-    if (!m_trackModel || payload.size() < 1)
+    if (payload.size() < 1)
         return;
     const int track = static_cast<quint8>(payload.at(0));
     const QString name = readLengthPrefixedString(payload, 1);
-    m_trackModel->setTrackName(track, name);
+
+    // Update both TrackListModel and MixerModel
+    if (m_trackModel)
+        m_trackModel->setTrackName(track, name);
+    if (m_mixerModel)
+        m_mixerModel->setTrackName(track, name);
+
     scheduleTrackCleanup(track);
 }
 
 void SerialController::handleTrackColor(const QByteArray &payload)
 {
-    if (!m_trackModel || payload.size() < 4)
+    if (payload.size() < 4)
         return;
     const int track = static_cast<quint8>(payload.at(0));
     const quint8 *colorData = reinterpret_cast<const quint8 *>(payload.constData() + 1);
     QColor color = (payload.size() >= 7) ? colorFrom14(colorData)
                                          : colorFrom7(colorData);
-    m_trackModel->setTrackColor(track, color);
+
+    // Update both TrackListModel and MixerModel
+    if (m_trackModel)
+        m_trackModel->setTrackColor(track, color);
+    if (m_mixerModel)
+        m_mixerModel->setTrackColor(track, color);
 }
 
 void SerialController::handleSceneName(const QByteArray &payload)
@@ -662,4 +684,120 @@ void SerialController::handleTrackBatchTimeout()
 
     m_trackPresence.fill(false);
     m_trackBatchSawZero = false;
+}
+
+// ═══════════════════════════════════════════════════════════
+// MIXER HANDLERS
+// ═══════════════════════════════════════════════════════════
+
+void SerialController::handleMixerVolume(const QByteArray &payload)
+{
+    if (!m_mixerModel || payload.size() < 3)
+        return;
+
+    const quint8 trackIndex = payload[0] & 0x7F;
+    const quint8 valueMsb = payload[1] & 0x7F;
+    const quint8 valueLsb = payload[2] & 0x7F;
+    
+    // Decode 14-bit value to 0.0-1.0
+    const int value14bit = decode14Bit(valueMsb, valueLsb);
+    const float volume = qBound(0.0f, value14bit / 16383.0f, 1.0f);
+    
+    m_mixerModel->setTrackVolume(trackIndex, volume);
+    
+    qDebug() << "Mixer Volume:" << trackIndex << "→" << volume;
+}
+
+void SerialController::handleMixerPan(const QByteArray &payload)
+{
+    if (!m_mixerModel || payload.size() < 3)
+        return;
+
+    const quint8 trackIndex = payload[0] & 0x7F;
+    const quint8 valueMsb = payload[1] & 0x7F;
+    const quint8 valueLsb = payload[2] & 0x7F;
+    
+    // Decode 14-bit value to 0.0-1.0 (0.5 = center)
+    const int value14bit = decode14Bit(valueMsb, valueLsb);
+    const float pan = qBound(0.0f, value14bit / 16383.0f, 1.0f);
+    
+    m_mixerModel->setTrackPan(trackIndex, pan);
+    
+    qDebug() << "Mixer Pan:" << trackIndex << "→" << pan;
+}
+
+void SerialController::handleMixerMute(const QByteArray &payload)
+{
+    if (!m_mixerModel || payload.size() < 2)
+        return;
+
+    const quint8 trackIndex = payload[0] & 0x7F;
+    const bool muted = (payload[1] & 0x7F) != 0;
+    
+    m_mixerModel->setTrackMuted(trackIndex, muted);
+    
+    qDebug() << "Mixer Mute:" << trackIndex << "→" << muted;
+}
+
+void SerialController::handleMixerSolo(const QByteArray &payload)
+{
+    if (!m_mixerModel || payload.size() < 2)
+        return;
+
+    const quint8 trackIndex = payload[0] & 0x7F;
+    const bool solo = (payload[1] & 0x7F) != 0;
+    
+    m_mixerModel->setTrackSolo(trackIndex, solo);
+    
+    qDebug() << "Mixer Solo:" << trackIndex << "→" << solo;
+}
+
+void SerialController::handleMixerArm(const QByteArray &payload)
+{
+    if (!m_mixerModel || payload.size() < 2)
+        return;
+
+    const quint8 trackIndex = payload[0] & 0x7F;
+    const bool armed = (payload[1] & 0x7F) != 0;
+    
+    m_mixerModel->setTrackArmed(trackIndex, armed);
+    
+    qDebug() << "Mixer Arm:" << trackIndex << "→" << armed;
+}
+
+void SerialController::handleMixerSend(const QByteArray &payload)
+{
+    if (!m_mixerModel || payload.size() < 4)
+        return;
+
+    const quint8 trackIndex = payload[0] & 0x7F;
+    const quint8 sendIndex = payload[1] & 0x7F;  // 0=SendA, 1=SendB, etc.
+    const quint8 valueMsb = payload[2] & 0x7F;
+    const quint8 valueLsb = payload[3] & 0x7F;
+
+    // Decode 14-bit value to 0.0-1.0
+    const int value14bit = decode14Bit(valueMsb, valueLsb);
+    const float sendLevel = qBound(0.0f, value14bit / 16383.0f, 1.0f);
+
+    m_mixerModel->setTrackSend(trackIndex, sendIndex, sendLevel);
+
+    qDebug() << "Mixer Send:" << trackIndex << "Send" << sendIndex << "→" << sendLevel;
+}
+
+void SerialController::handleMixerMode(const QByteArray &payload)
+{
+    if (payload.size() < 1)
+        return;
+
+    const quint8 mode = payload[0] & 0x7F;
+
+    if (m_mixerMode != mode) {
+        m_mixerMode = mode;
+
+        // Notify QML about mixer mode change
+        // 0=VOLUME_PAN, 1=SENDS_AB, 2=SENDS_CD, 3=MASTER_RETURNS
+        emit mixerModeChanged(mode);
+
+        qDebug() << "Mixer Mode changed to:" << mode;
+    }
 }
