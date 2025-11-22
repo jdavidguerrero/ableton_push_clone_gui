@@ -155,7 +155,7 @@ Rectangle {
 
                         onClipTriggered: {
                             console.log("Clip triggered: Track", trackIndex, "Scene", sceneIndex)
-                            // TODO: Send CMD_CLIP_TRIGGER via UART
+                            serialController.sendClipTrigger(trackIndex, sceneIndex)
                         }
 
                         onClipLongPressed: {

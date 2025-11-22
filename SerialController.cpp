@@ -8,6 +8,7 @@
 namespace {
 constexpr quint8 FrameHeader = 0xAA;
 constexpr quint8 CmdHandshake = 0x00;
+constexpr quint8 CmdClipTrigger = 0x11;
 constexpr quint8 CmdHandshakeReply = 0x01;
 constexpr quint8 CmdClipState = 0x10;
 constexpr quint8 CmdClipName = 0x14;
@@ -158,6 +159,14 @@ void SerialController::sendTransportLoop(bool state)
 {
     QByteArray payload(1, char(state ? 1 : 0));
     sendFrame(CmdTransportLoop, payload);
+}
+
+void SerialController::sendClipTrigger(int track, int scene)
+{
+    QByteArray payload;
+    payload.append(static_cast<char>(track));
+    payload.append(static_cast<char>(scene));
+    sendFrame(CmdClipTrigger, payload);
 }
 
 void SerialController::openPort()

@@ -2,7 +2,7 @@
 
 # Configuración
 RPI_USER="pi"
-RPI_IP="192.168.80.74"  # O tu IP
+RPI_HOST="raspberrypi.local"  # Usar mDNS
 PROJECT_NAME="PushClone"
 
 echo "📦 Empaquetando proyecto..."
@@ -23,10 +23,10 @@ tar czf ${PROJECT_NAME}.tar.gz \
     views/
 
 echo "📤 Copiando a Raspberry Pi..."
-scp ${PROJECT_NAME}.tar.gz $RPI_USER@$RPI_IP:~/
+scp ${PROJECT_NAME}.tar.gz $RPI_USER@$RPI_HOST:~/
 
 echo "🔨 Compilando en Raspberry Pi..."
-ssh $RPI_USER@$RPI_IP << 'REMOTE_SCRIPT'
+ssh $RPI_USER@$RPI_HOST << 'REMOTE_SCRIPT'
 
 # Limpiar build anterior
 rm -rf ~/PushClone
@@ -66,4 +66,4 @@ echo ""
 echo "✅ Proyecto compilado en RPi"
 echo ""
 echo "Para ejecutar:"
-echo "  ssh $RPI_USER@$RPI_IP 'cd PushClone/build && ./appPushClone'"
+echo "  ssh $RPI_USER@$RPI_HOST 'cd PushClone/build && ./appPushClone'"

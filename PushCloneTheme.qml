@@ -104,11 +104,14 @@ QtObject {
     readonly property int tabBarHeight: 50
 
     // ═══════════════════════════════════════════════════════
-    // ANIMATIONS (Durations in ms)
+    // ANIMATIONS (Durations in ms) - Optimized for RPi 5
     // ═══════════════════════════════════════════════════════
-    readonly property int animationFast: 150
-    readonly property int animationNormal: 250
-    readonly property int animationSlow: 400
+    readonly property int animationFast: 100       // Faster response
+    readonly property int animationNormal: 200     // Smooth transitions
+    readonly property int animationSlow: 350       // Noticeable but not sluggish
+
+    // Easing curve for smooth animations
+    readonly property int easingType: Easing.OutCubic
 
     // ═══════════════════════════════════════════════════════
     // HELPERS: Utility functions

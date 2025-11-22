@@ -34,6 +34,7 @@ Rectangle {
     width: 80
     height: 60
     radius: PushCloneTheme.radius
+    antialiasing: true  // Smooth edges (RPi 5 optimization)
 
     readonly property bool hasColorInfo: !Qt.colorEqual(clipColor, PushCloneTheme.clipEmpty)
 
@@ -85,7 +86,7 @@ Rectangle {
             margins: PushCloneTheme.spacingSmall
         }
 
-        color: "#ffffff"
+        color: "#000000"
 
         font.pixelSize: PushCloneTheme.fontSizeMedium
         font.family: PushCloneTheme.fontFamily

@@ -50,6 +50,7 @@ public:
     Q_INVOKABLE void sendTransportPlay(bool state);
     Q_INVOKABLE void sendTransportRecord(bool state);
     Q_INVOKABLE void sendTransportLoop(bool state);
+    Q_INVOKABLE void sendClipTrigger(int track, int scene);
 
     ClipGridModel* clipModel() const { return m_clipModel; }
     TrackListModel* trackModel() const { return m_trackModel; }

@@ -2,7 +2,19 @@ cmake_minimum_required(VERSION 3.16)
 
 project(PushClone VERSION 0.1 LANGUAGES CXX)
 
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# RPi 5 optimizations: Enable parallel compilation
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release)
+endif()
+
+# Compiler optimizations for RPi 5 (ARM Cortex-A76)
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64" OR CMAKE_SYSTEM_PROCESSOR MATCHES "arm")
+    message(STATUS "Detected ARM architecture - applying RPi 5 optimizations")
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -march=armv8-a+crc -mtune=cortex-a76")
+endif()
 
 # By default, we use Qt6. For Raspberry Pi, build with -DUSE_QT6=OFF
 option(USE_QT6 "Use Qt6 instead of Qt5" ON)

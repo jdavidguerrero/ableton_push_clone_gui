@@ -15,6 +15,9 @@ Window {
     title: qsTr("PushClone")
     color: PushCloneTheme.background
 
+    // Enable smooth rendering and antialiasing (RPi 5 optimization)
+    property bool useAntialiasing: true
+
     // ═══════════════════════════════════════════════════════
     // APPLICATION STATE
     // ═══════════════════════════════════════════════════════
