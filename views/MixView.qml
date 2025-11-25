@@ -3,7 +3,7 @@ import QtQuick.Layouts 1.15
 import PushClone 1.0
 
 // ═══════════════════════════════════════════════════════════
-// MIX VIEW - Simplified version using real MixerModel
+// MIX VIEW - Using ListView for reactive model updates
 // ═══════════════════════════════════════════════════════════
 
 Rectangle {
@@ -28,13 +28,19 @@ Rectangle {
     // HELPERS
     // ═══════════════════════════════════════════════════════
     function setTrackBank(bank) {
-        if (mixerModel)
+        if (mixerModel) {
             mixerModel.trackBank = bank;
+            // Notify Teensy about bank change so faders can reset pickup states
+            serialController.sendMixerBankChange(bank);
+        }
     }
 
     function setSelectedTrack(index) {
-        if (mixerModel)
+        if (mixerModel) {
             mixerModel.selectedTrackIndex = index;
+            // Send to Teensy → Ableton so selection is bidirectional
+            serialController.sendTrackSelect(index);
+        }
     }
 
     function nextTrackBank() {
@@ -55,55 +61,32 @@ Rectangle {
         anchors.margins: PushCloneTheme.spacing
         spacing: 8
 
-        // Header
-        Rectangle {
+        // Tracks Grid - Using ListView with reactive model binding
+        ListView {
+            id: tracksListView
             width: parent.width
-            height: 50
-            radius: PushCloneTheme.radius
-            color: PushCloneTheme.surface
-            border.color: PushCloneTheme.border
-
-            Row {
-                anchors.centerIn: parent
-                spacing: 16
-
-                Text {
-                    text: "MIXER"
-                    font.pixelSize: 20
-                    font.bold: true
-                    font.family: PushCloneTheme.fontFamily
-                    color: PushCloneTheme.text
-                    anchors.verticalCenter: parent.verticalCenter
-                }
-
-                Text {
-                    text: "Bank " + (root.trackBank + 1) + " • Tracks " + (root.trackBank * root.tracksPerBank + 1) + "-" + Math.min((root.trackBank + 1) * root.tracksPerBank, root.totalTracks)
-                    font.pixelSize: 12
-                    font.family: PushCloneTheme.fontFamilyMono
-                    color: PushCloneTheme.textDim
-                    anchors.verticalCenter: parent.verticalCenter
-                }
-            }
-        }
-
-        // Tracks Grid
-        Row {
-            width: parent.width
-            height: parent.height - footer.height - 66  // 50 header + 8 spacing + 8 spacing
+            height: parent.height - footer.height - 16
+            orientation: ListView.Horizontal
             spacing: 4
+            interactive: false
+            clip: true
 
-            Repeater {
-                model: root.tracksPerBank
+            model: root.mixerModel
 
-                delegate: Rectangle {
-                    id: trackDelegate
-                    property int localIndex: index
-                    property int globalIndex: root.trackBank * root.tracksPerBank + localIndex
-                    property int modelRow: globalIndex
-                    property bool hasTrack: globalIndex < root.totalTracks
+            // Only show tracks in current bank (4 tracks)
+            delegate: Item {
+                id: trackDelegate
+                property int globalIndex: model.index
+                property int localIndex: globalIndex - (root.trackBank * root.tracksPerBank)
+                property bool inCurrentBank: localIndex >= 0 && localIndex < root.tracksPerBank
+                property bool hasTrack: model.active
 
-                    width: parent.width / root.tracksPerBank
-                    height: parent.height
+                visible: inCurrentBank
+                width: inCurrentBank ? (tracksListView.width / root.tracksPerBank) : 0
+                height: tracksListView.height
+
+                Rectangle {
+                    anchors.fill: parent
                     radius: PushCloneTheme.radius
                     color: hasTrack && globalIndex === root.selectedTrackIndex ? PushCloneTheme.surfaceActive : PushCloneTheme.surface
                     border.width: hasTrack && globalIndex === root.selectedTrackIndex ? 2 : 1
@@ -119,11 +102,11 @@ Rectangle {
                             width: parent.width
                             height: 40
                             radius: 4
-                            color: hasTrack ? (mixerModel && mixerModel.data(mixerModel.index(modelRow, 0), mixerModel.ColorRole) || "#808080") : "#303030"
+                            color: hasTrack ? model.color : "#303030"
 
                             Text {
                                 anchors.centerIn: parent
-                                text: hasTrack ? (mixerModel && mixerModel.data(mixerModel.index(modelRow, 0), mixerModel.NameRole) || "Track " + (globalIndex + 1)) : "---"
+                                text: hasTrack ? model.name : "---"
                                 font.pixelSize: 12
                                 font.bold: true
                                 font.family: PushCloneTheme.fontFamily
@@ -146,7 +129,7 @@ Rectangle {
                             spacing: 4
 
                             Text {
-                                text: hasTrack ? (mixerModel && mixerModel.data(mixerModel.index(modelRow, 0), mixerModel.VolumeLabelRole) || "-∞") : "--"
+                                text: hasTrack ? model.volumeLabel : "--"
                                 font.pixelSize: 11
                                 font.family: PushCloneTheme.fontFamilyMono
                                 font.bold: true
@@ -161,7 +144,7 @@ Rectangle {
                                 color: PushCloneTheme.background
 
                                 Rectangle {
-                                    width: hasTrack ? (parent.width * (mixerModel && mixerModel.data(mixerModel.index(modelRow, 0), mixerModel.VolumeRole) || 0)) : 0
+                                    width: hasTrack ? (parent.width * model.volume) : 0
                                     height: parent.height
                                     radius: 6
                                     color: PushCloneTheme.primary
@@ -182,7 +165,7 @@ Rectangle {
                             spacing: 4
 
                             Text {
-                                text: hasTrack ? (mixerModel && mixerModel.data(mixerModel.index(modelRow, 0), mixerModel.PanLabelRole) || "C") : "--"
+                                text: hasTrack ? model.panLabel : "--"
                                 font.pixelSize: 11
                                 font.family: PushCloneTheme.fontFamilyMono
                                 font.bold: true
@@ -197,7 +180,7 @@ Rectangle {
                                 color: PushCloneTheme.background
 
                                 Rectangle {
-                                    width: hasTrack ? (parent.width * (mixerModel && mixerModel.data(mixerModel.index(modelRow, 0), mixerModel.PanRole) || 0.5)) : parent.width * 0.5
+                                    width: hasTrack ? (parent.width * model.pan) : parent.width * 0.5
                                     height: parent.height
                                     radius: 6
                                     color: PushCloneTheme.accent
@@ -218,7 +201,7 @@ Rectangle {
                             spacing: 4
 
                             Text {
-                                text: hasTrack ? Math.round((mixerModel && mixerModel.data(mixerModel.index(modelRow, 0), mixerModel.SendARole) || 0) * 100) + "%" : "--"
+                                text: hasTrack ? Math.round(model.sendA * 100) + "%" : "--"
                                 font.pixelSize: 11
                                 font.family: PushCloneTheme.fontFamilyMono
                                 color: PushCloneTheme.text
@@ -232,7 +215,7 @@ Rectangle {
                                 color: PushCloneTheme.background
 
                                 Rectangle {
-                                    width: hasTrack ? (parent.width * (mixerModel && mixerModel.data(mixerModel.index(modelRow, 0), mixerModel.SendARole) || 0)) : 0
+                                    width: hasTrack ? (parent.width * model.sendA) : 0
                                     height: parent.height
                                     radius: 6
                                     color: "#00ff88"
@@ -253,7 +236,7 @@ Rectangle {
                             spacing: 4
 
                             Text {
-                                text: hasTrack ? Math.round((mixerModel && mixerModel.data(mixerModel.index(modelRow, 0), mixerModel.SendBRole) || 0) * 100) + "%" : "--"
+                                text: hasTrack ? Math.round(model.sendB * 100) + "%" : "--"
                                 font.pixelSize: 11
                                 font.family: PushCloneTheme.fontFamilyMono
                                 color: PushCloneTheme.text
@@ -267,7 +250,7 @@ Rectangle {
                                 color: PushCloneTheme.background
 
                                 Rectangle {
-                                    width: hasTrack ? (parent.width * (mixerModel && mixerModel.data(mixerModel.index(modelRow, 0), mixerModel.SendBRole) || 0)) : 0
+                                    width: hasTrack ? (parent.width * model.sendB) : 0
                                     height: parent.height
                                     radius: 6
                                     color: "#ff8800"
@@ -296,7 +279,7 @@ Rectangle {
                                 width: 30
                                 height: 24
                                 radius: 4
-                                color: hasTrack && (mixerModel && mixerModel.data(mixerModel.index(modelRow, 0), mixerModel.MutedRole)) ? "#ff4444" : PushCloneTheme.background
+                                color: hasTrack && model.muted ? "#ff4444" : PushCloneTheme.background
                                 border.color: PushCloneTheme.border
 
                                 Text {
@@ -304,7 +287,7 @@ Rectangle {
                                     text: "M"
                                     font.pixelSize: 10
                                     font.bold: true
-                                    color: hasTrack && (mixerModel && mixerModel.data(mixerModel.index(modelRow, 0), mixerModel.MutedRole)) ? "#ffffff" : PushCloneTheme.textDim
+                                    color: hasTrack && model.muted ? "#ffffff" : PushCloneTheme.textDim
                                 }
 
                                 MouseArea {
@@ -319,7 +302,7 @@ Rectangle {
                                 width: 30
                                 height: 24
                                 radius: 4
-                                color: hasTrack && (mixerModel && mixerModel.data(mixerModel.index(modelRow, 0), mixerModel.SoloRole)) ? "#ffaa00" : PushCloneTheme.background
+                                color: hasTrack && model.solo ? "#ffaa00" : PushCloneTheme.background
                                 border.color: PushCloneTheme.border
 
                                 Text {
@@ -327,7 +310,7 @@ Rectangle {
                                     text: "S"
                                     font.pixelSize: 10
                                     font.bold: true
-                                    color: hasTrack && (mixerModel && mixerModel.data(mixerModel.index(modelRow, 0), mixerModel.SoloRole)) ? "#000000" : PushCloneTheme.textDim
+                                    color: hasTrack && model.solo ? "#000000" : PushCloneTheme.textDim
                                 }
 
                                 MouseArea {
@@ -342,7 +325,7 @@ Rectangle {
                                 width: 30
                                 height: 24
                                 radius: 4
-                                color: hasTrack && (mixerModel && mixerModel.data(mixerModel.index(modelRow, 0), mixerModel.ArmedRole)) ? "#ff0000" : PushCloneTheme.background
+                                color: hasTrack && model.armed ? "#ff0000" : PushCloneTheme.background
                                 border.color: PushCloneTheme.border
 
                                 Text {
@@ -350,7 +333,7 @@ Rectangle {
                                     text: "A"
                                     font.pixelSize: 10
                                     font.bold: true
-                                    color: hasTrack && (mixerModel && mixerModel.data(mixerModel.index(modelRow, 0), mixerModel.ArmedRole)) ? "#ffffff" : PushCloneTheme.textDim
+                                    color: hasTrack && model.armed ? "#ffffff" : PushCloneTheme.textDim
                                 }
 
                                 MouseArea {
@@ -427,53 +410,6 @@ Rectangle {
                         onClicked: root.nextTrackBank()
                     }
                 }
-            }
-        }
-    }
-
-    // Debug overlay (remove later)
-    Rectangle {
-        anchors.top: parent.top
-        anchors.right: parent.right
-        anchors.margins: 8
-        width: 120
-        height: 60
-        radius: 4
-        color: "#40000000"
-        border.color: PushCloneTheme.border
-        visible: true
-
-        Column {
-            anchors.centerIn: parent
-            spacing: 2
-
-            Text {
-                text: "Debug Info"
-                font.pixelSize: 9
-                font.bold: true
-                color: PushCloneTheme.text
-                anchors.horizontalCenter: parent.horizontalCenter
-            }
-
-            Text {
-                text: "Model: " + (mixerModel ? "OK" : "NULL")
-                font.pixelSize: 8
-                font.family: PushCloneTheme.fontFamilyMono
-                color: mixerModel ? "#00ff00" : "#ff0000"
-            }
-
-            Text {
-                text: "Tracks: " + root.totalTracks
-                font.pixelSize: 8
-                font.family: PushCloneTheme.fontFamilyMono
-                color: PushCloneTheme.text
-            }
-
-            Text {
-                text: "Bank: " + root.trackBank
-                font.pixelSize: 8
-                font.family: PushCloneTheme.fontFamilyMono
-                color: PushCloneTheme.text
             }
         }
     }

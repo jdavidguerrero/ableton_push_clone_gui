@@ -182,6 +182,7 @@ Window {
                 onLoaded: {
                     item.isPlaying = Qt.binding(function() { return serialController.transportPlaying })
                     item.isRecording = Qt.binding(function() { return serialController.transportRecording })
+                    item.shiftPressed = Qt.binding(function() { return serialController.shiftPressed })
                     item.tempo = Qt.binding(function() { return serialController.transportTempo })
                     item.songPosition = Qt.binding(function() { return serialController.transportPosition })
 

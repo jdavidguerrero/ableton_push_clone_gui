@@ -147,6 +147,22 @@ void SerialController::sendClipTrigger(int track, int scene)
     sendFrame(CmdClipTrigger, payload);
 }
 
+void SerialController::sendMixerBankChange(int bank)
+{
+    qDebug() << "📤 Sending mixer bank change to Teensy: bank" << bank;
+    QByteArray payload;
+    payload.append(static_cast<char>(bank & 0x7F));
+    sendFrame(CmdMixerBankChange, payload);
+}
+
+void SerialController::sendTrackSelect(int trackIndex)
+{
+    qDebug() << "📤 Sending track select to Teensy: track" << trackIndex;
+    QByteArray payload;
+    payload.append(static_cast<char>(trackIndex & 0x7F));
+    sendFrame(CmdTrackSelect, payload);
+}
+
 void SerialController::openPort()
 {
     if (m_serial.isOpen())
@@ -266,6 +282,11 @@ void SerialController::handleReconnectTimeout()
 
 void SerialController::processFrame(quint8 cmd, const QByteArray &payload)
 {
+    // Log ALL commands to see if mixer commands reach the switch
+    if (cmd == 0x21) {
+        qWarning() << "🎯🎯🎯 processFrame: CMD=0x21 (CmdMixerVolume) payload.size()=" << payload.size();
+    }
+
     switch (cmd) {
     case CmdHandshake:
         if (payload == QByteArrayLiteral("PUSHCLONE_GUI")) {
@@ -284,6 +305,15 @@ void SerialController::processFrame(quint8 cmd, const QByteArray &payload)
         qInfo() << "CMD_DISCONNECT recibido";
         setConnected(false);
         setConnectionState(WaitingHandshake);
+        break;
+    case CmdSelectedTrack:
+        if (payload.size() >= 1) {
+            int trackIndex = payload.at(0) & 0x7F;
+            qDebug() << "🎯 Selected track changed:" << trackIndex;
+            if (m_mixerModel) {
+                m_mixerModel->setSelectedTrackIndex(trackIndex);
+            }
+        }
         break;
     case CmdClipName:
         handleClipName(payload);
@@ -339,6 +369,7 @@ void SerialController::processFrame(quint8 cmd, const QByteArray &payload)
     
     // Mixer commands
     case CmdMixerVolume:
+        qWarning() << "⚡⚡⚡ CASE CmdMixerVolume REACHED!";
         handleMixerVolume(payload);
         break;
     case CmdMixerPan:
@@ -358,6 +389,9 @@ void SerialController::processFrame(quint8 cmd, const QByteArray &payload)
         break;
     case CmdMixerMode:
         handleMixerMode(payload);
+        break;
+    case CmdRingPosition:
+        handleRingPosition(payload);
         break;
 
     default:
@@ -429,10 +463,19 @@ void SerialController::handleClipName(const QByteArray &payload)
 {
     if (payload.size() < 2 || !m_clipModel)
         return;
-    const int track = static_cast<quint8>(payload.at(0));
-    const int scene = static_cast<quint8>(payload.at(1));
+    const int absoluteTrack = static_cast<quint8>(payload.at(0));
+    const int absoluteScene = static_cast<quint8>(payload.at(1));
     const QString name = readLengthPrefixedString(payload, 2);
-    m_clipModel->setClipName(track, scene, name);
+
+    // Convert to relative indices
+    const int relativeTrack = absoluteTrack - m_ringTrackOffset;
+    const int relativeScene = absoluteScene - m_ringSceneOffset;
+
+    // Only update if clip is within visible session ring (8x4)
+    if (relativeTrack >= 0 && relativeTrack < 8 &&
+        relativeScene >= 0 && relativeScene < 4) {
+        m_clipModel->setClipName(relativeTrack, relativeScene, name);
+    }
 }
 
 void SerialController::handleGridUpdate7bit(const QByteArray &payload)
@@ -492,24 +535,42 @@ void SerialController::handlePadUpdate7bit(const QByteArray &payload)
     if (!m_clipModel || payload.size() < 5)
         return;
 
-    const int track = static_cast<quint8>(payload.at(0));
-    const int scene = static_cast<quint8>(payload.at(1));
+    const int absoluteTrack = static_cast<quint8>(payload.at(0));
+    const int absoluteScene = static_cast<quint8>(payload.at(1));
     const quint8 *colorData = reinterpret_cast<const quint8 *>(payload.constData() + 2);
-    updatePadColor(track, scene, colorFrom7(colorData));
+
+    // Convert to relative indices
+    const int relativeTrack = absoluteTrack - m_ringTrackOffset;
+    const int relativeScene = absoluteScene - m_ringSceneOffset;
+
+    // Only update if clip is within visible session ring (8x4)
+    if (relativeTrack >= 0 && relativeTrack < 8 &&
+        relativeScene >= 0 && relativeScene < 4) {
+        updatePadColor(relativeTrack, relativeScene, colorFrom7(colorData));
+    }
 }
 
 void SerialController::handleClipState(const QByteArray &payload)
 {
     if (!m_clipModel || payload.size() < 3)
         return;
-    const int track = static_cast<quint8>(payload.at(0));
-    const int scene = static_cast<quint8>(payload.at(1));
+    const int absoluteTrack = static_cast<quint8>(payload.at(0));
+    const int absoluteScene = static_cast<quint8>(payload.at(1));
     const int state = static_cast<quint8>(payload.at(2));
-    m_clipModel->setClipState(track, scene, state);
 
-    if (payload.size() >= 9) {
-        const quint8 *colorData = reinterpret_cast<const quint8 *>(payload.constData() + 3);
-        updatePadColor(track, scene, colorFrom14(colorData));
+    // Convert to relative indices
+    const int relativeTrack = absoluteTrack - m_ringTrackOffset;
+    const int relativeScene = absoluteScene - m_ringSceneOffset;
+
+    // Only update if clip is within visible session ring (8x4)
+    if (relativeTrack >= 0 && relativeTrack < 8 &&
+        relativeScene >= 0 && relativeScene < 4) {
+        m_clipModel->setClipState(relativeTrack, relativeScene, state);
+
+        if (payload.size() >= 9) {
+            const quint8 *colorData = reinterpret_cast<const quint8 *>(payload.constData() + 3);
+            updatePadColor(relativeTrack, relativeScene, colorFrom14(colorData));
+        }
     }
 }
 
@@ -517,6 +578,7 @@ void SerialController::updatePadColor(int track, int scene, const QColor &color)
 {
     if (!m_clipModel)
         return;
+    // This method now expects RELATIVE indices (already converted by callers)
     m_clipModel->setClipColor(track, scene, color);
 }
 
@@ -524,32 +586,46 @@ void SerialController::handleTrackName(const QByteArray &payload)
 {
     if (payload.size() < 1)
         return;
-    const int track = static_cast<quint8>(payload.at(0));
+    const int absoluteTrack = static_cast<quint8>(payload.at(0));
     const QString name = readLengthPrefixedString(payload, 1);
 
-    // Update both TrackListModel and MixerModel
-    if (m_trackModel)
-        m_trackModel->setTrackName(track, name);
-    if (m_mixerModel)
-        m_mixerModel->setTrackName(track, name);
+    // Convert absolute track index to relative (based on session ring offset)
+    const int relativeTrack = absoluteTrack - m_ringTrackOffset;
 
-    scheduleTrackCleanup(track);
+    // Only update if track is within visible session ring (0-7)
+    if (relativeTrack >= 0 && relativeTrack < 8) {
+        if (m_trackModel)
+            m_trackModel->setTrackName(relativeTrack, name);
+    }
+
+    // MixerModel uses absolute indices (8 tracks total, independent of ring)
+    if (m_mixerModel)
+        m_mixerModel->setTrackName(absoluteTrack, name);
+
+    scheduleTrackCleanup(absoluteTrack);
 }
 
 void SerialController::handleTrackColor(const QByteArray &payload)
 {
     if (payload.size() < 4)
         return;
-    const int track = static_cast<quint8>(payload.at(0));
+    const int absoluteTrack = static_cast<quint8>(payload.at(0));
     const quint8 *colorData = reinterpret_cast<const quint8 *>(payload.constData() + 1);
     QColor color = (payload.size() >= 7) ? colorFrom14(colorData)
                                          : colorFrom7(colorData);
 
-    // Update both TrackListModel and MixerModel
-    if (m_trackModel)
-        m_trackModel->setTrackColor(track, color);
+    // Convert absolute track index to relative (based on session ring offset)
+    const int relativeTrack = absoluteTrack - m_ringTrackOffset;
+
+    // Only update if track is within visible session ring (0-7)
+    if (relativeTrack >= 0 && relativeTrack < 8) {
+        if (m_trackModel)
+            m_trackModel->setTrackColor(relativeTrack, color);
+    }
+
+    // MixerModel uses absolute indices
     if (m_mixerModel)
-        m_mixerModel->setTrackColor(track, color);
+        m_mixerModel->setTrackColor(absoluteTrack, color);
 }
 
 void SerialController::handleSceneName(const QByteArray &payload)
@@ -610,9 +686,15 @@ void SerialController::handleTransportCommand(quint8 cmd, const QByteArray &payl
         break;
     case CmdTransportTempo:
         if (payload.size() >= 2) {
-            const int value = (static_cast<quint8>(payload.at(0)) << 8) |
-                              static_cast<quint8>(payload.at(1));
-            const double tempo = value / 10.0;
+            // BPM is sent as 14-bit value (like mixer params)
+            const quint8 msb = payload.at(0) & 0x7F;
+            const quint8 lsb = payload.at(1) & 0x7F;
+            const int value14bit = decode14Bit(msb, lsb);
+            const double tempo = value14bit / 10.0;
+
+            qWarning() << "🎼 BPM Debug: MSB=" << msb << "LSB=" << lsb
+                      << "14bit=" << value14bit << "BPM=" << tempo;
+
             if (!qFuzzyCompare(tempo, m_transportTempo)) {
                 m_transportTempo = tempo;
                 emit transportTempoChanged();
@@ -692,20 +774,34 @@ void SerialController::handleTrackBatchTimeout()
 
 void SerialController::handleMixerVolume(const QByteArray &payload)
 {
-    if (!m_mixerModel || payload.size() < 3)
+    qWarning() << "🔊🔊🔊 handleMixerVolume CALLED - payload size:" << payload.size();
+
+    if (!m_mixerModel) {
+        qWarning() << "❌ handleMixerVolume: m_mixerModel is NULL!";
         return;
+    }
+
+    if (payload.size() < 3) {
+        qWarning() << "❌ handleMixerVolume: payload too short:" << payload.size();
+        return;
+    }
 
     const quint8 trackIndex = payload[0] & 0x7F;
     const quint8 valueMsb = payload[1] & 0x7F;
     const quint8 valueLsb = payload[2] & 0x7F;
-    
+
+    qWarning() << "   Parsed: track=" << trackIndex << "MSB=" << valueMsb << "LSB=" << valueLsb;
+
     // Decode 14-bit value to 0.0-1.0
     const int value14bit = decode14Bit(valueMsb, valueLsb);
     const float volume = qBound(0.0f, value14bit / 16383.0f, 1.0f);
-    
+
+    qWarning() << "   Decoded: 14bit=" << value14bit << "volume=" << volume;
+    qWarning() << "   MixerModel totalTracks=" << m_mixerModel->totalTracks();
+
     m_mixerModel->setTrackVolume(trackIndex, volume);
-    
-    qDebug() << "Mixer Volume:" << trackIndex << "→" << volume;
+
+    qWarning() << "✅ Mixer Volume:" << trackIndex << "→" << volume;
 }
 
 void SerialController::handleMixerPan(const QByteArray &payload)
@@ -799,5 +895,40 @@ void SerialController::handleMixerMode(const QByteArray &payload)
         emit mixerModeChanged(mode);
 
         qDebug() << "Mixer Mode changed to:" << mode;
+    }
+}
+
+void SerialController::handleRingPosition(const QByteArray &payload)
+{
+    // Payload: [track_msb, track_lsb, scene_msb, scene_lsb, width, height, overview]
+    if (payload.size() < 7)
+        return;
+
+    const int trackOffset = ((payload[0] & 0x7F) << 7) | (payload[1] & 0x7F);
+    const int sceneOffset = ((payload[2] & 0x7F) << 7) | (payload[3] & 0x7F);
+    const int width = payload[4] & 0x7F;
+    const int height = payload[5] & 0x7F;
+
+    if (m_ringTrackOffset != trackOffset || m_ringSceneOffset != sceneOffset) {
+        qDebug() << "📍 Session ring moved:" << m_ringTrackOffset << "→" << trackOffset
+                 << "," << m_ringSceneOffset << "→" << sceneOffset;
+
+        m_ringTrackOffset = trackOffset;
+        m_ringSceneOffset = sceneOffset;
+
+        // Clear models when ring position changes so new data can populate
+        if (m_trackModel) {
+            m_trackModel->resetAll();
+            qDebug() << "   ↳ TrackListModel cleared";
+        }
+        if (m_clipModel) {
+            m_clipModel->resetAll(QColor("#1a1a1a"));  // Reset to dark gray
+            qDebug() << "   ↳ ClipGridModel cleared";
+        }
+
+        emit ringPositionChanged();
+
+        qDebug() << "📍 Session ring position:" << trackOffset << sceneOffset
+                 << QString("(%1x%2)").arg(width).arg(height);
     }
 }

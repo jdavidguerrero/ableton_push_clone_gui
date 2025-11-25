@@ -80,9 +80,9 @@ Rectangle {
             }
         }
 
-        // Spacer
+        // Spacer (adjust for: 200 left + 80 tempo + 200 transport + 40 shift + 4 spacings)
         Item {
-            width: parent.width - 200 - 280 - (parent.spacing * 2)
+            width: parent.width - 200 - 80 - 200 - 40 - (parent.spacing * 4)
             height: 1
         }
 

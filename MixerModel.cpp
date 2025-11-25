@@ -1,5 +1,6 @@
 #include "MixerModel.h"
 #include <cmath>
+#include <QDebug>
 
 MixerModel::MixerModel(QObject *parent)
     : QAbstractListModel(parent)
@@ -11,7 +12,7 @@ MixerModel::MixerModel(QObject *parent)
         track.index = i;
         track.name = QString("Track %1").arg(i + 1);
         track.tag = QString("T%1").arg(i + 1);
-        track.active = (i < 5);  // First 5 active by default
+        track.active = true;  // All tracks active by default (updated from Live)
         m_tracks.append(track);
     }
 }
@@ -122,10 +123,17 @@ void MixerModel::setTrackColor(int trackIndex, const QColor &color)
 
 void MixerModel::setTrackVolume(int trackIndex, float volume)
 {
+    qWarning() << "🎵🎵🎵 MixerModel::setTrackVolume CALLED: track=" << trackIndex << "volume=" << volume;
+    qWarning() << "   m_tracks.size()=" << m_tracks.size();
+
     updateTrack(trackIndex, [&](MixerTrack &t) {
+        qWarning() << "   Lambda executing: old volume=" << t.volume << "new volume=" << volume;
         t.volume = qBound(0.0f, volume, 1.0f);
         t.volumeLabel = formatVolumeLabel(t.volume);
+        qWarning() << "   Updated: volume=" << t.volume << "label=" << t.volumeLabel;
     });
+
+    qWarning() << "   setTrackVolume completed";
 }
 
 void MixerModel::setTrackPan(int trackIndex, float pan)
@@ -252,14 +260,23 @@ int MixerModel::trackIndexFor(int trackIndex) const
 
 void MixerModel::updateTrack(int trackIndex, std::function<void(MixerTrack&)> updater)
 {
-    int idx = trackIndexFor(trackIndex);
-    if (idx < 0)
-        return;
+    qWarning() << "📊📊📊 MixerModel::updateTrack: trackIndex=" << trackIndex << "m_tracks.size()=" << m_tracks.size();
 
+    int idx = trackIndexFor(trackIndex);
+    qWarning() << "   trackIndexFor returned:" << idx;
+
+    if (idx < 0) {
+        qWarning() << "   ❌ Invalid index, returning early";
+        return;
+    }
+
+    qWarning() << "   Calling updater lambda...";
     updater(m_tracks[idx]);
-    
+
     const QModelIndex modelIndex = this->index(idx, 0);
+    qWarning() << "   Emitting dataChanged for row:" << idx;
     emit dataChanged(modelIndex, modelIndex);
+    qWarning() << "   ✅ updateTrack completed";
 }
 
 QString MixerModel::formatVolumeLabel(float volume) const

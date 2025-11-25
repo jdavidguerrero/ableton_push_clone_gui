@@ -30,6 +30,8 @@ class SerialController : public QObject
     Q_PROPERTY(QString portName READ portName WRITE setPortName NOTIFY portNameChanged)
     Q_PROPERTY(int baudRate READ baudRate WRITE setBaudRate NOTIFY baudRateChanged)
     Q_PROPERTY(int mixerMode READ mixerMode NOTIFY mixerModeChanged)
+    Q_PROPERTY(int ringTrackOffset READ ringTrackOffset NOTIFY ringPositionChanged)
+    Q_PROPERTY(int ringSceneOffset READ ringSceneOffset NOTIFY ringPositionChanged)
 
 public:
     enum ConnectionState {
@@ -55,6 +57,8 @@ public:
     Q_INVOKABLE void sendTransportRecord(bool state);
     Q_INVOKABLE void sendTransportLoop(bool state);
     Q_INVOKABLE void sendClipTrigger(int track, int scene);
+    Q_INVOKABLE void sendMixerBankChange(int bank);
+    Q_INVOKABLE void sendTrackSelect(int trackIndex);
 
     ClipGridModel* clipModel() const { return m_clipModel; }
     TrackListModel* trackModel() const { return m_trackModel; }
@@ -68,6 +72,8 @@ public:
     double transportTempo() const { return m_transportTempo; }
     QString transportPosition() const { return m_transportPosition; }
     int mixerMode() const { return m_mixerMode; }
+    int ringTrackOffset() const { return m_ringTrackOffset; }
+    int ringSceneOffset() const { return m_ringSceneOffset; }
 
 signals:
     void connectedChanged();
@@ -81,6 +87,7 @@ signals:
     void transportTempoChanged();
     void transportPositionChanged();
     void mixerModeChanged(int mode);
+    void ringPositionChanged();
 
 private slots:
     void handleReadyRead();
@@ -119,6 +126,7 @@ private:
     void handleMixerArm(const QByteArray &payload);
     void handleMixerSend(const QByteArray &payload);
     void handleMixerMode(const QByteArray &payload);
+    void handleRingPosition(const QByteArray &payload);
 
     QSerialPort m_serial;
     QByteArray m_rxBuffer;
@@ -139,6 +147,8 @@ private:
     double m_transportTempo = 120.0;
     QString m_transportPosition = QStringLiteral("1.1.1");
     int m_mixerMode = 0;  // 0=VOLUME_PAN, 1=SENDS_AB, 2=SENDS_CD, 3=MASTER_RETURNS
+    int m_ringTrackOffset = 0;
+    int m_ringSceneOffset = 0;
     QBitArray m_trackPresence;
     bool m_trackBatchSawZero = false;
 
@@ -147,6 +157,7 @@ private:
         CmdHandshakeReply = 0x01,
         CmdDisconnect = 0x02,
         CmdPing = 0x03,
+        CmdSelectedTrack = 0x06,
         CmdGridUpdate7bit = 0x60,
         CmdGridUpdate14bit = 0xA6, // CmdLedGridUpdate14
         CmdPadUpdate7bit = 0x84,   // CmdLedRgbState
@@ -167,6 +178,7 @@ private:
         CmdTransportPosition = 0x45,
         CmdTransportState = 0x49,
         CmdShiftState = 0x88,
+        CmdRingPosition = 0x0C,  // Session ring position update
         // Mixer commands
         CmdMixerVolume = 0x21,
         CmdMixerPan = 0x22,
@@ -174,7 +186,9 @@ private:
         CmdMixerSolo = 0x24,
         CmdMixerArm = 0x25,
         CmdMixerSend = 0x26,
-        CmdMixerMode = 0x98
+        CmdTrackSelect = 0x0D,     // GUI → Teensy → Live: select track
+        CmdMixerMode = 0x98,
+        CmdMixerBankChange = 0x99  // GUI → Teensy: notify bank change for fader pickup
     };
 };
 
