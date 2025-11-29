@@ -393,6 +393,12 @@ void SerialController::processFrame(quint8 cmd, const QByteArray &payload)
     case CmdRingPosition:
         handleRingPosition(payload);
         break;
+    case CmdSessionRingMetadata:
+        handleSessionRingMetadata(payload);
+        break;
+    case CmdSessionRingClips:
+        handleSessionRingClips(payload);
+        break;
 
     default:
         // Por ahora solo registramos otros comandos para depuración.
@@ -931,4 +937,137 @@ void SerialController::handleRingPosition(const QByteArray &payload)
         qDebug() << "📍 Session ring position:" << trackOffset << sceneOffset
                  << QString("(%1x%2)").arg(width).arg(height);
     }
+}
+
+void SerialController::handleSessionRingMetadata(const QByteArray &payload)
+{
+    // Bulk metadata: tracks and scenes with names and colors
+    // Format: [num_tracks] [track0: len, name..., R, G, B] ... [track7: ...]
+    //         [num_scenes] [scene0: len, name..., R, G, B] ... [scene3: ...]
+
+    int offset = 0;
+    if (payload.size() < 1) {
+        qWarning() << "Ring metadata bulk payload too short";
+        return;
+    }
+
+    // Parse tracks
+    quint8 numTracks = payload[offset++] & 0x7F;
+    qDebug() << "📦 Ring metadata bulk:" << numTracks << "tracks";
+
+    for (quint8 t = 0; t < numTracks && offset < payload.size(); t++) {
+        if (offset >= payload.size()) break;
+
+        quint8 nameLen = payload[offset++] & 0x7F;
+        if (offset + nameLen + 3 > payload.size()) break;  // name + RGB
+
+        QString trackName;
+        for (quint8 i = 0; i < nameLen; i++) {
+            trackName.append(QChar(payload[offset++] & 0x7F));
+        }
+
+        quint8 r7 = payload[offset++] & 0x7F;
+        quint8 g7 = payload[offset++] & 0x7F;
+        quint8 b7 = payload[offset++] & 0x7F;
+
+        // Convert 7-bit to 8-bit
+        quint8 r8 = r7 << 1;
+        quint8 g8 = g7 << 1;
+        quint8 b8 = b7 << 1;
+
+        QColor trackColor(r8, g8, b8);
+
+        if (m_trackModel) {
+            m_trackModel->setTrackName(t, trackName);
+            m_trackModel->setTrackColor(t, trackColor);
+        }
+    }
+
+    // Clear tracks above the received count (handles track deletion)
+    if (m_trackModel && numTracks > 0) {
+        m_trackModel->clearAbove(numTracks - 1);
+    }
+
+    // Parse scenes
+    if (offset < payload.size()) {
+        quint8 numScenes = payload[offset++] & 0x7F;
+        qDebug() << "📦 Ring metadata bulk:" << numScenes << "scenes";
+
+        for (quint8 s = 0; s < numScenes && offset < payload.size(); s++) {
+            if (offset >= payload.size()) break;
+
+            quint8 nameLen = payload[offset++] & 0x7F;
+            if (offset + nameLen + 3 > payload.size()) break;
+
+            QString sceneName;
+            for (quint8 i = 0; i < nameLen; i++) {
+                sceneName.append(QChar(payload[offset++] & 0x7F));
+            }
+
+            quint8 r7 = payload[offset++] & 0x7F;
+            quint8 g7 = payload[offset++] & 0x7F;
+            quint8 b7 = payload[offset++] & 0x7F;
+
+            // Convert 7-bit to 8-bit
+            quint8 r8 = r7 << 1;
+            quint8 g8 = g7 << 1;
+            quint8 b8 = b7 << 1;
+
+            QColor sceneColor(r8, g8, b8);
+
+            if (m_sceneModel) {
+                m_sceneModel->setSceneName(s, sceneName);
+                m_sceneModel->setSceneColor(s, sceneColor);
+            }
+        }
+
+        // Clear scenes above the received count (handles scene deletion)
+        if (m_sceneModel && numScenes > 0) {
+            m_sceneModel->clearAbove(numScenes - 1);
+        }
+    }
+
+    qDebug() << "✅ Processed ring metadata bulk (" << payload.size() << "bytes)";
+}
+
+void SerialController::handleSessionRingClips(const QByteArray &payload)
+{
+    // Bulk clips: 32 clips with states and colors
+    // Format: [clip0: state, R, G, B] [clip1: ...] ... [clip31: ...]
+    // Order: column-major (track 0 scenes 0-3, track 1 scenes 0-3, ...)
+
+    const int expectedBytes = 32 * 4;  // 32 clips × 4 bytes each
+    if (payload.size() < expectedBytes) {
+        qWarning() << "Ring clips bulk payload too short (got" << payload.size()
+                   << ", need" << expectedBytes << ")";
+        return;
+    }
+
+    qDebug() << "📦 Ring clips bulk: 32 clips";
+
+    int offset = 0;
+    for (int track = 0; track < 8; track++) {
+        for (int scene = 0; scene < 4; scene++) {
+            if (offset + 3 >= payload.size()) break;
+
+            quint8 state = payload[offset++] & 0x7F;
+            quint8 r7 = payload[offset++] & 0x7F;
+            quint8 g7 = payload[offset++] & 0x7F;
+            quint8 b7 = payload[offset++] & 0x7F;
+
+            // Convert 7-bit to 8-bit for RGB
+            quint8 r8 = r7 << 1;
+            quint8 g8 = g7 << 1;
+            quint8 b8 = b7 << 1;
+
+            QColor clipColor(r8, g8, b8);
+
+            if (m_clipModel) {
+                m_clipModel->setClipState(track, scene, state);
+                m_clipModel->setClipColor(track, scene, clipColor);
+            }
+        }
+    }
+
+    qDebug() << "✅ Processed ring clips bulk (32 clips)";
 }

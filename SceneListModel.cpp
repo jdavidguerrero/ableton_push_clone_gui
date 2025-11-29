@@ -88,6 +88,37 @@ void SceneListModel::setSceneTriggered(int index, bool triggered)
     emit dataChanged(modelIndex, modelIndex, { TriggeredRole });
 }
 
+void SceneListModel::clearAbove(int lastActiveIndex)
+{
+    if (m_scenes.isEmpty())
+        return;
+
+    int start = qMax(0, lastActiveIndex + 1);
+    if (start >= m_scenes.size())
+        return;
+
+    bool changed = false;
+    for (int i = start; i < m_scenes.size(); ++i) {
+        SceneInfo &scene = m_scenes[i];
+        QString defaultName = QStringLiteral("Scene %1").arg(i + 1);
+        QColor defaultColor("#1a1a1a");
+
+        if (scene.name == defaultName && scene.color == defaultColor && !scene.triggered)
+            continue;
+
+        scene.name = defaultName;
+        scene.color = defaultColor;
+        scene.triggered = false;
+        changed = true;
+    }
+
+    if (changed) {
+        const QModelIndex first = this->index(start, 0);
+        const QModelIndex last = this->index(m_scenes.size() - 1, 0);
+        emit dataChanged(first, last);
+    }
+}
+
 bool SceneListModel::validIndex(int index) const
 {
     return index >= 0 && index < m_scenes.size();

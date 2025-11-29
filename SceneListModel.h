@@ -34,6 +34,7 @@ public:
     void setSceneName(int index, const QString &name);
     void setSceneColor(int index, const QColor &color);
     void setSceneTriggered(int index, bool triggered);
+    void clearAbove(int lastActiveIndex);
 
 private:
     bool validIndex(int index) const;

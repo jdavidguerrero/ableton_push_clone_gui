@@ -127,6 +127,8 @@ private:
     void handleMixerSend(const QByteArray &payload);
     void handleMixerMode(const QByteArray &payload);
     void handleRingPosition(const QByteArray &payload);
+    void handleSessionRingMetadata(const QByteArray &payload);
+    void handleSessionRingClips(const QByteArray &payload);
 
     QSerialPort m_serial;
     QByteArray m_rxBuffer;
@@ -188,7 +190,9 @@ private:
         CmdMixerSend = 0x26,
         CmdTrackSelect = 0x0D,     // GUI → Teensy → Live: select track
         CmdMixerMode = 0x98,
-        CmdMixerBankChange = 0x99  // GUI → Teensy: notify bank change for fader pickup
+        CmdMixerBankChange = 0x99,  // GUI → Teensy: notify bank change for fader pickup
+        CmdSessionRingMetadata = 0x9A,  // Bulk session ring metadata (tracks/scenes names+colors)
+        CmdSessionRingClips = 0x9B      // Bulk session ring clips (32 clips states+colors)
     };
 };
 
